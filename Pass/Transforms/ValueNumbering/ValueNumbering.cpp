@@ -5,7 +5,13 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Instruction.h"
+
+#include <llvm/Support/ToolOutputFile.h>
+#include <llvm/Support/FileSystem.h>
+#include "llvm/IR/ModuleSlotTracker.h"
 #include <string>
+
+#include <unordered_map>
 
 using namespace llvm;
 using namespace std;
@@ -15,54 +21,113 @@ using namespace std;
 using namespace llvm;
 
 namespace {
-struct ValueNumbering : public FunctionPass {
-  string func_name = "test";
-  static char ID;
-  ValueNumbering() : FunctionPass(ID) {}
 
-  bool runOnFunction(Function &F) override {
-    errs() << "ValueNumbering: ";
-    errs() << F.getName() << "\n";
+    int curid = 1;
+    int expid = 1;
+    string exp = "";
+
+    unordered_map< string, int > valueTable;
+    map< Value*, int > valueName;
+
+    char ops[5] = "+-*/";
+    map< unsigned int, int > opmap = { {16,2}, {14,1}, {12,0}, {19,3}, {18,3} };
+
+struct ValueNumbering : public FunctionPass {
+
+    string func_name = "test";
+    static char ID;
+    ValueNumbering() : FunctionPass(ID) {}
+
+    bool runOnFunction(Function &F) override
+    {
         if (F.getName() != func_name) return false;
+
+        string outName;
+
+        outName = F.getParent()->getSourceFileName();
+        outName[ outName.length() - 1 ] = 'o';
+        outName += "ut";
+
+        std::error_code EC;
+        ToolOutputFile outputFile( outName, EC, sys::fs::F_None );
 
         for (auto& basic_block : F)
         {
-
             for (auto& inst : basic_block)
             {
-            	errs() << inst << "\n";
-              if(inst.getOpcode() == Instruction::Load){
-                      errs() << "This is Load"<<"\n";
-              }
-              if(inst.getOpcode() == Instruction::Store){
-                      errs() << "This is Store"<<"\n";
-              }
+                errs() << inst << "\n";
+                errs() << "Op Code:" << inst.getOpcodeName()<<"\n"; // print opcode name
                 if (inst.isBinaryOp())
                 {
-                    errs() << "Op Code:" << inst.getOpcodeName()<<"\n"; // print opcode name
-                    if(inst.getOpcode() == Instruction::Add){
-                      errs() << "This is Addition"<<"\n";
+                    Value* a = inst.getOperand(0);
+                    Value* b = inst.getOperand(1);
+                    Value* c = dyn_cast<Value>(&inst);
+
+                    map< Value*, int >::iterator it;
+                    it = valueName.find( a );
+
+                    if ( it == valueName.end() )
+                    {
+                        valueName[ a ] = curid;
+                        curid++;
                     }
-                    if(inst.getOpcode() == Instruction::Add){
-                      errs() << "This is Addition"<<"\n";
+                    it = valueName.find( b );
+                    if ( it == valueName.end() )
+                    {
+                        valueName[ b ] = curid;
+                        curid++;
                     }
-                    if(inst.getOpcode() == Instruction::Mul){
-                      errs() << "This is Multiplication"<<"\n";
+                    it = valueName.find( c );
+                    if ( it == valueName.end() )
+                    {
+                        valueName[ c ] = curid;
+                        curid++;
                     }
-                    
-                    // See Other classes, Instruction::Sub, Instruction::UDiv, Instruction::SDiv
-                //	errs() << "Operand(0)" << (*inst.getOperand(0))<<"\n";
-                    auto* ptr = dyn_cast<User>(&inst);
-					//errs() << "\t" << *ptr << "\n";
-                    for (auto it = ptr->op_begin(); it != ptr->op_end(); ++it) {
-                        errs() << "\t" <<  *(*it) << "\n";
-                        //if ((*it)->hasName()) errs() << (*it)->getName() << "\n";                      
+
+                    int a_id = valueName[ a ];
+                    int b_id = valueName[ b ];
+                    int c_id = valueName[ c ];
+
+                    unordered_map< string, int >::iterator it2;
+                    it2 = valueTable.find(  to_string(a_id) );
+                    if ( it2 == valueTable.end() )
+                    {
+                        valueTable[ to_string(a_id) ] = expid;
+                        expid++;
                     }
-                }
-            }
+
+                    it2 = valueTable.find(  to_string(b_id) );
+                    if ( it2 == valueTable.end() )
+                    {
+                        valueTable[ to_string(b_id) ] = expid;
+                        expid++;
+                    }
+
+                    a_id = valueTable[ to_string(a_id) ];
+                    b_id = valueTable[ to_string(b_id) ];
+
+                    if ( a_id < b_id )
+                        exp = to_string(a_id) + " " + to_string( inst.getOpcode() ) + " " + to_string(b_id);
+                    else
+                        exp = to_string(b_id) + " " + to_string( inst.getOpcode() ) + " " + to_string(a_id);
+
+                    it2 = valueTable.find( exp );
+                    if ( it2 == valueTable.end() )
+                    {
+                        valueTable[ exp ] = expid;
+                        expid++;
+                    }
+
+                    valueTable[ to_string(c_id) ] = valueTable[ exp ];
+
+                    exp = to_string( valueTable[ to_string(c_id) ] ) + "=" + to_string(a_id) + ops[ opmap[ inst.getOpcode() ] ] + to_string(b_id);
+                    outputFile.os() << exp << "\n";
+                    outputFile.keep();
+                 }
+             }
         }
-    return false;
-  }
+        return false;
+    }
 }; // end of struct ValueNumbering
 }  // end of anonymous namespace
 
