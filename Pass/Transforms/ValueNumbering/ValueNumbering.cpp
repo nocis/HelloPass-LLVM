@@ -22,15 +22,15 @@ using namespace llvm;
 
 namespace {
 
-    int curid = 1;
-    int expid = 1;
-    string exp = "";
+    int curid = 1;// current variable alias(id)
+    int expid = 1;// current expression alias(id)
+    string exp = "";// set up expressions
 
-    unordered_map< string, int > valueTable;
-    map< Value*, int > valueName;
+    unordered_map< string, int > valueTable;// store expression-number
+    map< Value*, int > valueName;// store value-id
 
-    char ops[5] = "+-*/";
-    map< unsigned int, int > opmap = { {16,2}, {14,1}, {12,0}, {19,3}, {18,3} };
+    char ops[5] = "+-*/";// table for operations name
+    map< unsigned int, int > opmap = { {16,2}, {14,1}, {12,0}, {19,3}, {18,3} };// map for Op_Code-index in ops
 
 struct ValueNumbering : public FunctionPass {
 
@@ -59,6 +59,7 @@ struct ValueNumbering : public FunctionPass {
                 errs() << "Op Code:" << inst.getOpcodeName()<<"\n"; // print opcode name
                 if (inst.isBinaryOp())
                 {
+                    User* usr = dyn_cast<User>( &inst );
                     Value* a = inst.getOperand(0);
                     Value* b = inst.getOperand(1);
                     Value* c = dyn_cast<Value>(&inst);
